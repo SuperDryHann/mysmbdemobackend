@@ -23,14 +23,14 @@ jobs:
       uses: docker/login-action@v2
       with:
         registry: https://index.docker.io/v1/
-        username: ${{ secrets.AzureAppService_ContainerUsername_52d1de82726140a09a07af6461eaae6d }}
-        password: ${{ secrets.AzureAppService_ContainerPassword_628f76017bf54232949698d09e8dacab }}
+        username: ${{ secrets.AzureAppService_ContainerUsername_35979609449f47509539314ace1d94d3 }}
+        password: ${{ secrets.AzureAppService_ContainerPassword_635a5cb249684e9680e823a2f3fccee3 }}
 
     - name: Build and push container image to registry
       uses: docker/build-push-action@v3
       with:
         push: true
-        tags: index.docker.io/${{ secrets.AzureAppService_ContainerUsername_52d1de82726140a09a07af6461eaae6d }}/superdryhanlim/mysmbdemobackend:${{ github.sha }}
+        tags: index.docker.io/${{ secrets.AzureAppService_ContainerUsername_35979609449f47509539314ace1d94d3 }}/superdryhanlim/mysmbdemobackend:${{ github.sha }}
         file: ./Dockerfile
 
   deploy:
@@ -47,5 +47,5 @@ jobs:
       with:
         app-name: 'mysmbdemobackend'
         slot-name: 'production'
-        publish-profile: ${{ secrets.AzureAppService_PublishProfile_16ff9fcb621e4b658be64c7148915ce0 }}
-        images: 'index.docker.io/${{ secrets.AzureAppService_ContainerUsername_52d1de82726140a09a07af6461eaae6d }}/superdryhanlim/mysmbdemobackend:${{ github.sha }}'
+        publish-profile: ${{ secrets.AzureAppService_PublishProfile_e77469196ef44dc199dd6bca51f49053 }}
+        images: 'index.docker.io/${{ secrets.AzureAppService_ContainerUsername_35979609449f47509539314ace1d94d3 }}/superdryhanlim/mysmbdemobackend:${{ github.sha }}'

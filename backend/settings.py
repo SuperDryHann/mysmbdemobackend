@@ -45,6 +45,7 @@ CORS_ALLOW_CREDENTIALS = True
 ALLOWED_HOSTS = ['*']
 
 
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'backend.auth_azure.AzureJWTAuthentication',

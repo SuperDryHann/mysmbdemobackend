@@ -1,0 +1,22 @@
+{
+    "name": "Python Dev Container",
+    "dockerFile": "../Dockerfile",
+    "context": "..",
+    "appPort": [7000],
+    "settings": {
+      "python.pythonPath": "/usr/local/bin/python",
+      "python.linting.enabled": true,
+      // "python.formatting.autopep8Path": "/usr/local/bin/autopep8",
+      // "python.formatting.blackPath": "/usr/local/bin/black",
+      // "python.testing.unittestEnabled": true
+    },
+    "extensions": [
+      "ms-python.python",
+      "ms-toolsai.jupyter",
+      "GitHub.copilot"
+    ],
+    "remoteUser": "root",
+    "mounts": [
+      "source=${localWorkspaceFolder},target=/app,type=bind"
+    ]
+}

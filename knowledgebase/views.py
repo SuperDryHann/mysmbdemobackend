@@ -25,7 +25,6 @@ def upload(request):
     try:
         # Upload file to Azure Blob Storage
         files = request.FILES
-        print(files)
         for key in files.keys():
             file = files.get(key)
             upload_blob(data = file, output_name = file.name, container_name = AZURE_STORAGE_CONTAINER, account_name = AZURE_STORAGE_ACCOUNT, account_key = AZURE_STORAGE_KEY)
@@ -42,7 +41,10 @@ def get_blob_info(request):
     AZURE_STORAGE_ACCOUNT=os.getenv('AZURE_STORAGE_ACCOUNT')
     AZURE_STORAGE_KEY=os.getenv('AZURE_STORAGE_KEY')
     AZURE_STORAGE_CONTAINER=os.getenv('AZURE_STORAGE_CONTAINER')
-
+    print("___________________________________________________________________________")
+    print(AZURE_STORAGE_ACCOUNT)    
+    print(AZURE_STORAGE_KEY)
+    print(AZURE_STORAGE_CONTAINER)
     # Get the list of blobs in the container
     blob_metadatas = get_blob_list(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, AZURE_STORAGE_CONTAINER)
 

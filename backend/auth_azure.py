@@ -164,7 +164,7 @@ class AzureJWTMiddleware(BaseMiddleware):
     def __init__(self, inner):
         self.inner = inner
         self.jwk_url = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
-        self.audience = f"api://{os.getenv('FRONTEND_URL')}/{os.getenv('AZURE_ENTRA_CLIENT_ID')}"
+        self.audience = f"api://{os.getenv('FRONTEND_DOMAIN')}/{os.getenv('AZURE_ENTRA_CLIENT_ID')}"
         super().__init__(inner)
 
     async def __call__(self, scope, receive, send):

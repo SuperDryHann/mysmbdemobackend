@@ -54,7 +54,7 @@ SIMPLE_JWT = {
     'SIGNING_KEY': None,  # This should be None because we'll use JWK for validation
     'VERIFYING_KEY': None,  # Will be fetched via the JWK_URL
     'AUTH_HEADER_TYPES': ('Bearer',), 
-    'AUDIENCE': f'api://{os.getenv("FRONTEND_URL")}/{os.getenv("AZURE_ENTRA_CLIENT_ID")}',
+    'AUDIENCE': f'api://{os.getenv("FRONTEND_DOMAIN")}/{os.getenv("AZURE_ENTRA_CLIENT_ID")}',
     'ISSUER': f'https://sts.windows.net/{os.getenv("AZURE_ENTRA_TENANT_ID")}/',
     'ISSUER': None,
     'JWK_URL': f'https://login.microsoftonline.com/common/discovery/v2.0/keys',
@@ -93,12 +93,15 @@ TEMPLATES = [
 WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database
-# https://docs.djangoproject.com/en/4.1/ref/settings/#databases
-
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_NAME'),
+        'USER': os.getenv('POSTGRES_USER'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
+        'HOST': os.getenv('POSTGRES_HOST'),  # or the IP address of your PostgreSQL server
+        'PORT': '5432',  # or the port your PostgreSQL server is listening on
+        'OPTIONS': {'sslmode':'require'},
     }
 }
 

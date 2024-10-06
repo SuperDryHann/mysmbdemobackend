@@ -54,13 +54,7 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     'ALGORITHM': 'RS256',
-    'SIGNING_KEY': None,  # This should be None because we'll use JWK for validation
-    'VERIFYING_KEY': None,  # Will be fetched via the JWK_URL
     'AUTH_HEADER_TYPES': ('Bearer',), 
-    'AUDIENCE': f'api://{os.getenv("FRONTEND_DOMAIN")}/{os.getenv("AZURE_ENTRA_CLIENT_ID")}',
-    'ISSUER': f'https://sts.windows.net/{os.getenv("AZURE_ENTRA_TENANT_ID")}/',
-    'ISSUER': None,
-    'JWK_URL': f'https://login.microsoftonline.com/common/discovery/v2.0/keys',
 }
 
 MIDDLEWARE = [

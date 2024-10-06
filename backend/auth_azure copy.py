@@ -189,112 +189,106 @@ class AzureJWTAuthentication(JWTAuthentication):
                     _("The user's password has been changed."), code="password_changed"
                 )
         return user
-
-
-
-# AzureJWTAuthenticationWS middleware is called with any asgi request. The class start with extracting "access_token" from websocket url.
-# - Extract "access_token" from websocket url
-# - Pass the token to get_validated_token() method. The method is responsible to validate and decode the access token.
-# - The get_user() method get or create user from validated token from step above by id claim
-
-# The get_validated_token() method validate token with AzureAccessToken class. AzureAccessToken class overrides get_token_backend() and verify() method.
-# - The get_token_backend() specifies now to use AzureTokenbackend class rather than TokenBakend class.
-# - The verify() method inherits its previous method and it adds id, jti and token_type as Azure Entra jwt doesn't have the claims. This is safe as jwt is validated with Azure Entra in previous step.
-
-# The websocket_authenticated decorator is defined to check "is_authenticated" is true in the user found from the above step. If it is not true, it stop the process. 
+    
 
 
 # Websocket authentication middleware
 import os
 import jwt
+import requests
+from django.conf import settings
+from jwt.algorithms import RSAAlgorithm
 from urllib.parse import parse_qs
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-
+import json
 
 
 class AzureJWTAuthenticationWS(BaseMiddleware):
 
+
+
+class AzureJWTMiddleware(BaseMiddleware):
+    def __init__(self, inner):
+        self.inner = inner
+        self.jwk_url = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+        self.audience = f"api://{os.getenv('FRONTEND_DOMAIN')}/{os.getenv('AZURE_ENTRA_CLIENT_ID')}"
+        super().__init__(inner)
+
     async def __call__(self, scope, receive, send):
-        # Extract access token
         query_string = scope.get("query_string", b"").decode()
         query_params = parse_qs(query_string)
-        raw_token = query_params.get("access_token", [None])[0].encode()
+        access_token = query_params.get("access_token", [None])[0]
 
-        if raw_token is None:
+        if access_token is None:
             scope["user"] = AnonymousUser()
             return await self.inner(scope, receive, send)
 
-        validated_token = self.get_validated_token(raw_token)
 
-        user = await self.get_user(validated_token)
+        # Obtain public key from JWKs
+        jwks = await self.get_jwks()
+        unverified_header = jwt.get_unverified_header(access_token)
+        rsa_key = {}
+        for key in jwks["keys"]:
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = {
+                    "kty": key["kty"],
+                    "kid": key["kid"],
+                    "use": key["use"],
+                    "n": key["n"],
+                    "e": key["e"],
+                }
+        if not rsa_key:
+            raise jwt.InvalidTokenError("Unable to find matching JWK.")
 
+        public_key = RSAAlgorithm.from_jwk(json.dumps(rsa_key))
+
+
+
+        # Dynamic Issuer
+        unverified_payload = jwt.decode(access_token, options={"verify_signature": False})
+        tenant_id = unverified_payload.get('tid')
+        if not tenant_id:
+            raise TokenError("Token does not contain 'tid' (tenant ID) claim.")
+        dynamic_issuer = f'https://sts.windows.net/{tenant_id}/'
+
+
+
+        # Decode and validate the token
+        payload = jwt.decode(
+            access_token,
+            public_key, # Public key for signature verification
+            algorithms=["RS256"],
+            audience=self.audience,
+            issuer=dynamic_issuer,
+        )
+
+        user = await self.get_or_create_user(payload)
         scope["user"] = user
 
         return await self.inner(scope, receive, send)
-    
-
-
-    def get_validated_token(self, raw_token: bytes) -> Token:
-        """
-        Override the class to use AzureAccessToken class rather than AccessToken (api_settings.AUTH_TOKEN_CLASSES)
-        """
-        messages = []
-        try:
-            return AzureAccessToken(raw_token) # This line is changed to use the class rather than AccessToken class. Could change setting to ensure use this class, but in this way, less configuration.  
-        except TokenError as e:
-            messages.append(
-                {
-                    "token_class": AzureAccessToken.__name__,
-                    "token_type": AzureAccessToken.token_type,
-                    "message": e.args[0],
-                }
-            )
-
-        raise InvalidToken(
-            {
-                "detail": _("Given token not valid for any token type"),
-                "messages": messages,
-            }
-        )
-
-
 
     @database_sync_to_async
-    def get_or_create_user(self, username):
-        user, created = User.objects.get_or_create(username=username)
+    def get_or_create_user(self, payload):
+        # Assuming the unique identifier is in 'sub' claim
+        user, created = User.objects.get_or_create(
+            username=payload.get("sub"),
+            defaults={
+                "user_uuid": payload.get("sub"),
+                "email": payload.get("email", ""),
+                "first_name": payload.get("given_name", ""),
+                "last_name": payload.get("family_name", ""),
+            },
+        )
         return user
-    
 
-
-    AuthUser = TypeVar("AuthUser", AbstractBaseUser, TokenUser)
-
-    async def get_user(self, validated_token: Token) -> AuthUser:
-        """
-        Attempts to find and return a user using the given validated token.
-        """
-        try:
-            user_id = validated_token["id"] # change to id from user_id. id is sub claim which is global unique
-        except KeyError:
-            raise InvalidToken(_("Token contained no recognizable user identification"))
-
-        try:
-            user = await self.get_or_create_user(username = user_id) # Change to get or create from get
-        except:
-            raise AuthenticationFailed("User not found", code="user_not_found")
-
-        if not user.is_active:
-            raise AuthenticationFailed("User is inactive", code="user_inactive")
-
-        if api_settings.CHECK_REVOKE_TOKEN:
-            if validated_token.get(
-                api_settings.REVOKE_TOKEN_CLAIM
-            ) != get_md5_hash_password(user.password):
-                raise AuthenticationFailed(
-                    _("The user's password has been changed."), code="password_changed"
-                )
-        return user
+    @database_sync_to_async
+    def get_jwks(self):
+        response = requests.get(self.jwk_url)
+        response.raise_for_status()
+        return response.json()
 
 
 

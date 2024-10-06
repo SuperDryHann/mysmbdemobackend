@@ -46,9 +46,7 @@ class Chat(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         # Parse the received message from WebSocket
         data = json.loads(text_data)
-        print(data)
         received_message = data.get('message', '')
-        print(received_message)
 
         # await self.simulate_streaming(received_message)
         await self.chat(received_message)
@@ -124,10 +122,6 @@ class Chat(AsyncWebsocketConsumer):
             args_schema=RetrieverLocalInput,
             return_direct = True
         )
-
-
-
-
 
 
 
@@ -221,7 +215,6 @@ class Chat(AsyncWebsocketConsumer):
             input =[HumanMessage(content=input)]
             response = llm_with_structured_output.invoke(input, config)
             response = response.dict()
-            print(type(response))
             return {"final_output": response}
 
 
@@ -280,7 +273,6 @@ class Chat(AsyncWebsocketConsumer):
         async for msg, metadata in graph.astream(input = {"messages" : user_input}, config = config, stream_mode="messages"):
             if msg.content and isinstance(msg, AIMessageChunk): # check msg.content is not empty string. It has placeholder while tools are running.
                 output = output + msg
-                print(msg)
 
                 await asyncio.sleep(0.01)
                 await self.send(text_data=json.dumps({

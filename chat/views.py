@@ -211,7 +211,6 @@ def chat(request):
 
     ## Invoke the chain
     output = rag_chain.invoke({"input": query}) # the chain needs input, chat_hitory and context
-    # pprint(answer)
     answer = output["output"]["answer"]
     reference_id = output["output"]["citations"]
     reference = output["reference"]

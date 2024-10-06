@@ -41,10 +41,7 @@ def get_blob_info(request):
     AZURE_STORAGE_ACCOUNT=os.getenv('AZURE_STORAGE_ACCOUNT')
     AZURE_STORAGE_KEY=os.getenv('AZURE_STORAGE_KEY')
     AZURE_STORAGE_CONTAINER=os.getenv('AZURE_STORAGE_CONTAINER')
-    print("___________________________________________________________________________")
-    print(AZURE_STORAGE_ACCOUNT)    
-    print(AZURE_STORAGE_KEY)
-    print(AZURE_STORAGE_CONTAINER)
+
     # Get the list of blobs in the container
     blob_metadatas = get_blob_list(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, AZURE_STORAGE_CONTAINER)
 
@@ -52,7 +49,6 @@ def get_blob_info(request):
     for blob_metadata in blob_metadatas: # Let's change to async later
         blob_url = get_blob_url(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, AZURE_STORAGE_CONTAINER, blob_metadata["name"])
         blob_metadata["url"] = blob_url
-        print(blob_metadatas)
 
     return Response(blob_metadatas)
 
@@ -63,9 +59,7 @@ def delete_file(request):
     AZURE_STORAGE_ACCOUNT=os.getenv('AZURE_STORAGE_ACCOUNT')
     AZURE_STORAGE_KEY=os.getenv('AZURE_STORAGE_KEY')
     AZURE_STORAGE_CONTAINER=os.getenv('AZURE_STORAGE_CONTAINER')
-    blob_name = request.data["name"]
-    print("___________________________________________________________________________")
-    print(request.data)    
+    blob_name = request.data["name"] 
 
     # Get the list of blobs in the container
     delete_blob(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, AZURE_STORAGE_CONTAINER, blob_name)

@@ -8,7 +8,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 django_asgi_app = get_asgi_application()
 
 # Import the JWT middleware here after above line (asgi application is ready. The library includes user model and middleware)
-from backend.auth_azure import AzureJWTMiddleware
+from backend.auth_azure import AzureJWTAuthenticationWS
 import backend.routing # routing.py contains consumer which imports models, so must be placed after get_asgi_application   
 
 
@@ -16,7 +16,7 @@ import backend.routing # routing.py contains consumer which imports models, so m
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
     # Define the WebSocket protocol
-    "websocket": AzureJWTMiddleware(
+    "websocket": AzureJWTAuthenticationWS(
         URLRouter(
             backend.routing.websocket_urlpatterns  # Use your app's WebSocket routing
         )

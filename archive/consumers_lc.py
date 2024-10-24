@@ -173,7 +173,7 @@ class Chat(AsyncWebsocketConsumer):
 
             answer: str = Field(
                 ...,
-                description="The answer to the user question, which is based only on the given sources. Don't include source_id in the answer.",
+                description="Comprehensive response based on reference documents in markdown format. NEVER use facts outside of the reference.",
             )
             citations: List[str] = Field(
                 ...,

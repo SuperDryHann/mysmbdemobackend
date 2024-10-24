@@ -101,11 +101,12 @@ def OCR(image_url, endpoint, subscription_key):
 
 
 
-def upload_blob(data, output_name, container_name, account_name, account_key):
+def upload_blob(data, output_name, container_name, account_name, account_key, metadata: dict=None):
     connection_string = f"DefaultEndpointsProtocol=https;AccountName={account_name};AccountKey={account_key};EndpointSuffix=core.windows.net"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     blob_client = blob_service_client.get_blob_client(container_name, output_name)
 
+    # Inject content_type, which allows to read from iframe rather than downloading.
     try: 
         content_type = data.content_type
     except:
@@ -114,5 +115,48 @@ def upload_blob(data, output_name, container_name, account_name, account_key):
     blob_client.upload_blob(
         data,
         overwrite=True,
-        content_settings=ContentSettings(content_type=content_type)
+        content_settings=ContentSettings(content_type=content_type),
+        metadata=metadata
         )
+    
+
+
+def get_or_create_container(container_name, account_name, account_key):
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={account_name};AccountKey={account_key};EndpointSuffix=core.windows.net"
+    # Create a BlobServiceClient
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+
+    # Check if the container exists, if not create it
+    try:
+        container_client = blob_service_client.get_container_client(container_name)
+        if not container_client.exists():
+            print(f"Container '{container_name}' does not exist. Creating the container...")
+            blob_service_client.create_container(container_name)
+            print(f"Container '{container_name}' created.")
+            return container_name
+        else:
+            print(f"Container '{container_name}' already exists.")
+            return container_name
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+
+def post_blob_metadata(account_name, account_key, container_name, blob_name, metadata):
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={account_name};AccountKey={account_key};EndpointSuffix=core.windows.net"
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    blob_client = container_client.get_blob_client(blob_name)
+    blob_client.set_blob_metadata(metadata)
+
+
+
+def get_blob_custom_metadata(account_name, account_key, container_name, blob_name):
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={account_name};AccountKey={account_key};EndpointSuffix=core.windows.net"
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    blob_client = container_client.get_blob_client(blob_name)
+    blob_properties = blob_client.get_blob_properties()
+    return blob_properties.metadata
+

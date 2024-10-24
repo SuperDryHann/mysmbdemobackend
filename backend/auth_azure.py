@@ -28,6 +28,7 @@ from rest_framework_simplejwt.utils import get_md5_hash_password
 from django.contrib.auth.models import AbstractBaseUser
 from rest_framework_simplejwt.models import TokenUser
 from typing import TypeVar
+from django.utils.translation import gettext_lazy as _
 
 
 
@@ -276,11 +277,13 @@ class AzureJWTAuthenticationWS(BaseMiddleware):
         """
         try:
             user_id = validated_token["id"] # change to id from user_id. id is sub claim which is global unique
+
         except KeyError:
             raise InvalidToken(_("Token contained no recognizable user identification"))
 
         try:
             user = await self.get_or_create_user(username = user_id) # Change to get or create from get
+
         except:
             raise AuthenticationFailed("User not found", code="user_not_found")
 

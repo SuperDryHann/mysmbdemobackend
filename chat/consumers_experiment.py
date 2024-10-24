@@ -17,11 +17,15 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import StructuredTool
 from langgraph.prebuilt import ToolNode
-from utils.miscellaneous import get_claim_from_token_ws, get_parameter_ws
+from utils.miscellaneous import get_claim_from_token_ws
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from openai import AzureOpenAI
+from langchain.output_parsers.openai_tools import JsonOutputKeyToolsParser
+from langgraph.types import StreamWriter
+
+
 
 
 
@@ -64,18 +68,7 @@ class Chat(AsyncWebsocketConsumer):
         # setup & variables
         # variables
         tenant_id=get_claim_from_token_ws(self.scope, 'tid')
-
-        case=get_parameter_ws(self.scope, 'case')
-        print("case: ", case)
-        print("-------------------------------------------------------------------------------")
-        if case=="customerservice":
-            index_name = "customerservice"
-        elif case=="organisation":
-            index_name = tenant_id
-
-        print("index name: ", index_name)
-        print("-------------------------------------------------------------------------------")
-
+        index_name = tenant_id
         user_input = received_message
         # username = self.scope["user"].username
         # user_uuid = self.scope["user"].user_uuid ########################### Later it should be generated as sub-clients are not in Azure B2C
@@ -117,8 +110,8 @@ class Chat(AsyncWebsocketConsumer):
             documents_dict = []
             for i, document in enumerate(documents):
                 dict_output = {
+                    "reference_id": str(i+1),
                     # "reference_id": document["chunk_id"],
-                    "reference_id": str(1+i),
                     "title": document["title"],
                     "content": document["chunk"],
                 }
@@ -174,10 +167,18 @@ class Chat(AsyncWebsocketConsumer):
                     )
                 )
 
-            return {
-                "messages": outputs,
-                "references": tool_result
+            try: 
+                output={
+                    "messages": outputs,
+                    "references": tool_result
                 }
+            except:
+                output={
+                    "messages": outputs,
+                    "references": []
+                }
+
+            return output
 
 
 
@@ -196,50 +197,64 @@ class Chat(AsyncWebsocketConsumer):
         
 
         # Output parse node
-        # List of Reference object type
-        class ReferencedAnswer(BaseModel):
-            """Parse the output of the LLM with tools to get the answer and references."""
-            answer: str = Field(
-                ...,
-                description="The answer",
-            )
-            reference_ids: List[str] = Field(
-                ...,
+        async def output_model(
+                state: AgentState, 
+                writer: StreamWriter,
+                config: RunnableConfig):
+            
+            # # Reference object type
+            # class Reference(BaseModel):
+            #     source_id: str = Field(
+            #         ...,
+            #         description="The unique identifier of the reference."
+            #         )
+            #     title: str = Field(
+            #         ..., 
+            #         escription="The title of the reference."
+            #         )
+            #     content: str = Field(
+            #         ..., 
+            #         description="The content of reference."
+            #         )
+
+            # List of Reference object type
+            class ReferencedAnswer(BaseModel):
+                """Provide comprehensive answer based on reference documents."""
+                answer: str = Field(
+                    ...,
+                    description="""Comprehensive response for user query based on reference documents in markdown format. Always use numbered list structure for response when it is possible. NEVER use facts outside of the reference. Do not mention reference id in the answer.
+                    If user query cannot be answered based on the reference, say you cannot provide an answer based on knowledge base.""",
+                )
+                reference_ids: List[str] = Field(
+                    ...,
                     description="The reference_ids of the SPECIFIC sources which justify the answer. Provide ONLY the reference_ids of the sources which justify the answer.",
+                )
+
+            # Output parser llm
+            rag_chain = (
+                llm.bind_tools(
+                            [ReferencedAnswer],
+                            tool_choice = "ReferencedAnswer"
+                        ) |
+                        JsonOutputKeyToolsParser(
+                            key_name="ReferencedAnswer", 
+                            first_tool_only=True
+                            )
             )
-
-        # Output parser llm 
-        llm_with_structured_output = llm.with_structured_output(ReferencedAnswer)
-
-        # Node function
-        def output_model(state: AgentState, config: RunnableConfig):
+            
             input =f"""
-                Answer: {state.get("answer")}
+                User Query: {state.get("messages")[0].content}
                 References: {state.get("references")}
             """
 
             input =[HumanMessage(content=input)]
-            response = llm_with_structured_output.invoke(input, config)
-            response = response.dict()
-            reference_ids = response.get("reference_ids")
-            try:
-                response["references"] = [reference for reference in state.get("references") if reference["reference_id"] in reference_ids]
-            except:
-                response["references"] = []
-            return {"final_output": response}
 
-
-
-        # Conditional edge
-        def should_continue(state: AgentState):
-            messages = state["messages"]
-            last_message = messages[-1]
-            # If there is no function call, then we finish
-            if not last_message.tool_calls:
-                return "output_parser"
-            # Otherwise if there is, we continue
-            else:
-                return "tools"
+            async for chunk in rag_chain.astream(input):
+                writer(chunk)
+            
+            reference_ids = chunk.get("reference_ids")
+            chunk["references"] = [reference for reference in state["references"] if reference["reference_id"] in reference_ids]
+            return {"final_output": chunk}
 
 
 
@@ -249,29 +264,24 @@ class Chat(AsyncWebsocketConsumer):
 
 
         # Nodes
-        workflow.add_node("agent", call_model)
-        workflow.add_node("tools", tool_node)
+        workflow.add_node("function_call", call_model)
+        workflow.add_node("tool_execution", tool_node)
         workflow.add_node("output_parser", output_model)
 
 
 
         # Edges (from, condition function, mapping "(result: next node)"")
-        # Conditional edge
-        workflow.add_conditional_edges(
-            "agent",
-            should_continue,
-            ["tools", "output_parser"]
-        )
 
         # Edge
-        workflow.add_edge("tools", "agent")
+        workflow.add_edge("function_call", "tool_execution")    
+        workflow.add_edge("tool_execution", "output_parser")
         workflow.add_edge("output_parser", END)
 
 
 
         # Compile the graph
         memory = MemorySaver()
-        workflow.add_edge(START, "agent")
+        workflow.add_edge(START, "function_call")
         graph = workflow.compile(checkpointer=memory)
 
 
@@ -281,17 +291,12 @@ class Chat(AsyncWebsocketConsumer):
 
         output = AIMessageChunk(content="")
         config = {"configurable": {"thread_id": "1"}}
-        async for msg, metadata in graph.astream(input = {"messages" : user_input}, config = config, stream_mode="messages"):
-            if msg.content and isinstance(msg, AIMessageChunk): # check msg.content is not empty string. It has placeholder while tools are running.
-                output = output + msg
-
-                await asyncio.sleep(0.01)
+        async for chunk in graph.astream(input = {"messages" : user_input}, config = config, stream_mode="custom"):
+            if chunk.get("answer"): # check msg.content is not empty string. It has placeholder while tools are running.
                 await self.send(text_data=json.dumps({
-                    "message": output.content
+                    "message": chunk.get("answer")
                 }))
         
-
-
         # Task complete, send a final message
         answer = graph.get_state(config).values["final_output"]["answer"]
         references = graph.get_state(config).values["final_output"]["references"]
@@ -299,7 +304,7 @@ class Chat(AsyncWebsocketConsumer):
             "message": answer,
             "references": references,
             "is_completed": True
-        }        
+        }
         await self.send(text_data=json.dumps(final_output))
 
 

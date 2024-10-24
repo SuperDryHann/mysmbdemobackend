@@ -17,7 +17,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import StructuredTool
 from langgraph.prebuilt import ToolNode
-from utils.miscellaneous import get_claim_from_token_ws, get_parameter_ws
+from utils.miscellaneous import get_claim_from_token_ws
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
@@ -64,18 +64,7 @@ class Chat(AsyncWebsocketConsumer):
         # setup & variables
         # variables
         tenant_id=get_claim_from_token_ws(self.scope, 'tid')
-
-        case=get_parameter_ws(self.scope, 'case')
-        print("case: ", case)
-        print("-------------------------------------------------------------------------------")
-        if case=="customerservice":
-            index_name = "customerservice"
-        elif case=="organisation":
-            index_name = tenant_id
-
-        print("index name: ", index_name)
-        print("-------------------------------------------------------------------------------")
-
+        index_name = tenant_id
         user_input = received_message
         # username = self.scope["user"].username
         # user_uuid = self.scope["user"].user_uuid ########################### Later it should be generated as sub-clients are not in Azure B2C
@@ -117,8 +106,7 @@ class Chat(AsyncWebsocketConsumer):
             documents_dict = []
             for i, document in enumerate(documents):
                 dict_output = {
-                    # "reference_id": document["chunk_id"],
-                    "reference_id": str(1+i),
+                    "id": document["chunk_id"],
                     "title": document["title"],
                     "content": document["chunk"],
                 }
@@ -196,6 +184,21 @@ class Chat(AsyncWebsocketConsumer):
         
 
         # Output parse node
+        # Reference object type
+        class Reference(BaseModel):
+            source_id: str = Field(
+                ...,
+                description="The unique identifier of the reference."
+                )
+            title: str = Field(
+                ..., 
+                escription="The title of the reference."
+                )
+            content: str = Field(
+                ..., 
+                description="The content of reference."
+                )
+
         # List of Reference object type
         class ReferencedAnswer(BaseModel):
             """Parse the output of the LLM with tools to get the answer and references."""
@@ -203,9 +206,9 @@ class Chat(AsyncWebsocketConsumer):
                 ...,
                 description="The answer",
             )
-            reference_ids: List[str] = Field(
+            references: List[Reference] = Field(
                 ...,
-                    description="The reference_ids of the SPECIFIC sources which justify the answer. Provide ONLY the reference_ids of the sources which justify the answer.",
+                description="List of the references of the SPECIFIC sources which justify the answer. Include ONLY the references used to create the answer.",
             )
 
         # Output parser llm 
@@ -221,11 +224,6 @@ class Chat(AsyncWebsocketConsumer):
             input =[HumanMessage(content=input)]
             response = llm_with_structured_output.invoke(input, config)
             response = response.dict()
-            reference_ids = response.get("reference_ids")
-            try:
-                response["references"] = [reference for reference in state.get("references") if reference["reference_id"] in reference_ids]
-            except:
-                response["references"] = []
             return {"final_output": response}
 
 

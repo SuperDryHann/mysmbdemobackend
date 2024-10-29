@@ -3,21 +3,47 @@ import json
 from backend.auth_azure import websocket_authenticated
 from dotenv import load_dotenv
 from pprint import pprint
-from typing import Annotated, Sequence, TypedDict, List
-from langchain_core.messages import BaseMessage, ToolMessage, SystemMessage, AIMessageChunk, HumanMessage, AIMessage
+from typing import(
+    Annotated, 
+    Sequence, 
+    TypedDict, 
+    List
+)
+from langchain_core.messages import (
+    BaseMessage, 
+    ToolMessage, 
+    SystemMessage, 
+    AIMessageChunk,
+    HumanMessage, 
+    AIMessage
+)
 from langgraph.graph.message import add_messages
-from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
+from langchain_openai import (
+    AzureChatOpenAI, 
+    AzureOpenAIEmbeddings
+)
 from langchain_core.runnables import RunnableConfig
 from langchain_community.vectorstores.azuresearch import AzureSearch
-from langgraph.graph import StateGraph, END
-from langgraph.constants import END, START
+from langgraph.graph import (
+    StateGraph,
+    START,
+    END
+)
 from langgraph.checkpoint.memory import MemorySaver
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
-from langchain.pydantic_v1 import BaseModel, Field
+from langchain.pydantic_v1 import (
+    BaseModel, 
+    Field
+)
 from langchain.tools import StructuredTool
 from langgraph.prebuilt import ToolNode
-from utils.miscellaneous import get_claim_from_token_ws, get_parameter_ws
+from utils.miscellaneous import (
+    get_claim_from_token_ws, 
+    get_parameter_ws
+)
+from utils.langchain.tools import tool_retriever_local
+from utils.langchain.utils import OrmChatMessageHistory
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
@@ -26,9 +52,7 @@ from .models import ChatHistory
 from asgiref.sync import sync_to_async
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages.utils import messages_from_dict
 from langchain_core.messages.base import messages_to_dict
-from django.forms.models import model_to_dict
 
 
 
@@ -53,17 +77,21 @@ class Chat(AsyncWebsocketConsumer):
         # Accept the WebSocket connections
         await self.accept()
 
+
+
     async def disconnect(self, close_code):
         # Handle WebSocket disconnection (optional cleanup can be added here)
         pass
+
+
 
     async def receive(self, text_data):
         # Parse the received message from WebSocket
         data = json.loads(text_data)
         received_message = data.get('message', '')
-
-        # await self.simulate_streaming(received_message)
         await self.chat(received_message)
+
+
 
     async def chat(self, received_message):
         # setup & variables
@@ -92,104 +120,23 @@ class Chat(AsyncWebsocketConsumer):
 
 
 
-        # ChatHistory instance
-        class OrmChatHistory(BaseChatMessageHistory):
-            def __init__(self, sub: str):
-                self.sub=sub
-
-            @property
-            async def aget_messages(self):
-                # get history function
-                @sync_to_async
-                def get_chat_history(sub: str):
-                    chat_history, created=ChatHistory.objects.get_or_create(
-                        sub=sub,
-                        defaults={
-                            "tenant_id": tenant_id,
-                            "oid": oid,
-                            "username": email,
-                            "messages": []
-                        }
-                    )
-                    return messages_from_dict(chat_history.messages)
-                
-                return await get_chat_history(self.sub)
-            
-            def clear(self):
-                pass
-
-            async def aadd_messages(self, messages: list[BaseMessage]):
-                @sync_to_async
-                def append_messages(sub: str, messagess: list[BaseMessage]):
-                    chat_history, created=ChatHistory.objects.get_or_create(
-                        sub=sub,
-                        defaults={
-                            "tenant_id": tenant_id,
-                            "oid": oid,
-                            "username": email,
-                            "messages": []
-                        }
-                    )
-                    chat_history.messages.extend(messages)
-                    chat_history.save()
-                await append_messages(self.sub, messages)
+        # Chat history instance
         
-        orm_chat_history=OrmChatHistory(sub)
+        orm_chat_history=OrmChatMessageHistory(user_uuid=sub)
         chat_history=await orm_chat_history.aget_messages
-        print(chat_history)
         chat_history_subset=chat_history[-10:]
 
 
 
-        # Retriever function (for tool)
-        def retrieve_local(query: str):
-            """Retrieve reference knowledge and facts from the database to respond to the user."""
-            credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-
-            search_client = SearchClient(endpoint=AZURE_SEARCH_ENDPOINT,
-                      index_name=index_name,
-                      credential=credential)
-            
-            vector_query = VectorizableTextQuery(
-                text=query, 
-                k_nearest_neighbors=5, 
-                fields="chunk_vector")
-
-            documents = search_client.search(
-                search_text=query,
-                vector_queries=[vector_query],
-                query_type="semantic",
-                select=["title", "chunk", "chunk_id"],
-                top=5
-                )
-
-            documents_dict = []
-            for i, document in enumerate(documents):
-                dict_output = {
-                    # "reference_id": document["chunk_id"],
-                    "reference_id": str(1+i),
-                    "title": document["title"],
-                    "content": document["chunk"],
-                }
-                documents_dict.append(dict_output)
-
-            return documents_dict
-        
-
-
-        # retriever_local_tool input type
-        class RetrieverLocalInput(BaseModel):
-            query: str = Field(description="Query to retrieve knowledge from the database")
-        
-
-
-        # retriever_local_tool
-        retriever_local_tool = StructuredTool.from_function(
-            func = retrieve_local,
-            name = "retrieve_local",
-            description = "Retrieve reference knowledge and facts from the database to respond to the user.",
-            args_schema=RetrieverLocalInput,
-            return_direct = True
+        # tool_retriever_local
+        tool_retriever_local_instance = tool_retriever_local(
+            index_name=index_name,
+            AZURE_SEARCH_ENDPOINT=AZURE_SEARCH_ENDPOINT,
+            AZURE_SEARCH_KEY=AZURE_SEARCH_KEY,
+            title_field="title",
+            content_field="chunk",
+            vector_field="chunk_vector",
+            semantic_search_inclusion=["title", "chunk", "chunk_id"]
         )
 
 
@@ -203,8 +150,9 @@ class Chat(AsyncWebsocketConsumer):
 
 
 
+        # Node and Endge functions
         # Tool excution node
-        tools = [retriever_local_tool]
+        tools = [tool_retriever_local_instance]
 
         llm_with_tools = llm.bind_tools(tools)
 
@@ -359,8 +307,6 @@ class Chat(AsyncWebsocketConsumer):
 
         await orm_chat_history.aadd_messages(serialised_messages)
         
-        # await save_chat_history(sub, tenant_id, oid, email, received_message, answer)
-
 
 
         # Send the final message

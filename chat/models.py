@@ -2,10 +2,7 @@ from django.db import models
 
 # Create your models here.
 class ChatHistory(models.Model):
-    tenant_id = models.CharField(max_length=50, null=True)
-    sub = models.CharField(max_length=50, null=True)
-    oid = models.CharField(max_length=50, null=True)
-    username = models.CharField(max_length=50, null=True)
+    user_uuid = models.CharField(max_length=50, null=True)
     datetime = models.DateTimeField(auto_now_add=True)
     messages = models.JSONField()
 

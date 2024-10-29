@@ -1,4 +1,11 @@
-from django.shortcuts import render
+
+from dotenv import load_dotenv
+import os
+from rest_framework.response import Response
+from rest_framework.decorators import (
+    api_view, 
+    permission_classes
+)
 from utils.Azure_functions import (
     get_blob_list,
     get_blob_url,
@@ -8,10 +15,6 @@ from utils.Azure_functions import (
     post_blob_metadata,
     get_blob_custom_metadata
 )
-from dotenv import load_dotenv
-import os
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
 from azure.core.credentials import AzureKeyCredential
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.vectorstores.azuresearch import AzureSearch
@@ -24,12 +27,9 @@ from utils.miscellaneous import (
     scrape_url,
     generate_file_name_from_url
     )
-import asyncio
 from django.http import StreamingHttpResponse
 from pprint import pprint
 from backend.auth_azure import websocket_authenticated
-load_dotenv()
-
 from azure.search.documents.indexes import (
     SearchIndexClient,
     SearchIndexerClient
@@ -59,6 +59,8 @@ from datetime import datetime
 from .models import KnowledgebaseStatus
 from .serializers import KnowledgeBaseStatusSerializer
 from rest_framework import viewsets
+
+load_dotenv()
 AZURE_SEARCH_ENDPOINT=os.getenv('AZURE_SEARCH_ENDPOINT')
 AZURE_SEARCH_KEY=os.getenv('AZURE_SEARCH_KEY')
 AZURE_STORAGE_ACCOUNT=os.getenv('AZURE_STORAGE_ACCOUNT')
@@ -90,20 +92,15 @@ def upload(request):
             "is_deleted": "false"
             }
 
-    try:
-        # Get or create container
-        get_or_create_container(container_name, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY)
+    # Get or create container
+    get_or_create_container(container_name, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY)
 
-        # Upload file to Azure Blob Storage
-        files=request.FILES
-        for key in files.keys():
-            file=files.get(key)
-            upload_blob(data=file, output_name=file.name, container_name=container_name, account_name=AZURE_STORAGE_ACCOUNT, account_key=AZURE_STORAGE_KEY, metadata=metadata)
-        return Response({"message": "Upload succeeded."}, status=200)
-
-    except Exception as e:
-        print(e)
-        return Response({"error": str(e)}, status=500)
+    # Upload file to Azure Blob Storage
+    files=request.FILES
+    for key in files.keys():
+        file=files.get(key)
+        upload_blob(data=file, output_name=file.name, container_name=container_name, account_name=AZURE_STORAGE_ACCOUNT, account_key=AZURE_STORAGE_KEY, metadata=metadata)
+    return Response({"message": "Upload succeeded."}, status=200)
 
 
 
@@ -161,25 +158,6 @@ def tag_delete_file(request):
         new_metadata["is_deleted"] = "true"
         post_blob_metadata(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, container_name, blob_name, new_metadata)
     return Response({"message": "Soft deleton succeeded."})
-
-
-
-# @api_view(['POST'])
-# @permission_classes([IsAuthenticated])
-# def delete_file(request):
-#     case=request.headers.get('Case')
-#     tenant_id=get_claim_from_token_http(request, 'tid')
-
-#     if case == 'customerservice':
-#         container_name=case
-#     elif case == 'organisation':
-#         container_name=tenant_id
-
-#     blob_name=request.data["name"] 
-
-#     # Get the list of blobs in the container
-#     delete_blob(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, container_name, blob_name)
-#     return Response({"message": "The deleted successfully."})
 
 
 

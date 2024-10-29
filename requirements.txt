@@ -81,6 +81,7 @@ langchain==0.2.16
 langchain-community==0.2.17
 langchain-core==0.2.41
 langchain-openai==0.1.25
+langchain-postgres==0.0.12
 langchain-text-splitters==0.2.4
 langdetect==1.0.9
 langgraph==0.2.32
@@ -135,7 +136,7 @@ pandas==2.2.2
 pdf2image==1.17.0
 pdfminer.six==20231228
 pdfplumber==0.11.4
-pgvector==0.3.4
+pgvector==0.2.5
 pi_heif==0.18.0
 pikepdf==9.2.1
 pillow==10.4.0
@@ -144,6 +145,9 @@ portalocker==2.10.1
 proto-plus==1.24.0
 protobuf==5.28.2
 psutil==6.0.0
+psycopg==3.2.3
+psycopg-binary==3.2.3
+psycopg-pool==3.2.3
 psycopg2-binary==2.9.9
 pyasn1==0.6.1
 pyasn1_modules==0.4.1

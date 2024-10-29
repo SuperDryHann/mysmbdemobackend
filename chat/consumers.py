@@ -22,8 +22,13 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from openai import AzureOpenAI
-
-
+from .models import ChatHistory
+from asgiref.sync import sync_to_async
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages.utils import messages_from_dict
+from langchain_core.messages.base import messages_to_dict
+from django.forms.models import model_to_dict
 
 
 
@@ -64,21 +69,16 @@ class Chat(AsyncWebsocketConsumer):
         # setup & variables
         # variables
         tenant_id=get_claim_from_token_ws(self.scope, 'tid')
+        sub=get_claim_from_token_ws(self.scope, 'sub')
+        oid=get_claim_from_token_ws(self.scope, 'oid')
+        email=get_claim_from_token_ws(self.scope, 'upn')
+        user_input = received_message
 
         case=get_parameter_ws(self.scope, 'case')
-        print("case: ", case)
-        print("-------------------------------------------------------------------------------")
         if case=="customerservice":
             index_name = "customerservice"
         elif case=="organisation":
             index_name = tenant_id
-
-        print("index name: ", index_name)
-        print("-------------------------------------------------------------------------------")
-
-        user_input = received_message
-        # username = self.scope["user"].username
-        # user_uuid = self.scope["user"].user_uuid ########################### Later it should be generated as sub-clients are not in Azure B2C
 
 
 
@@ -89,6 +89,55 @@ class Chat(AsyncWebsocketConsumer):
             openai_api_key = AZURE_OPENAI_KEY,
             openai_api_version = AZURE_OPENAI_API_VERSION
             )
+
+
+
+        # ChatHistory instance
+        class OrmChatHistory(BaseChatMessageHistory):
+            def __init__(self, sub: str):
+                self.sub=sub
+
+            @property
+            async def aget_messages(self):
+                # get history function
+                @sync_to_async
+                def get_chat_history(sub: str):
+                    chat_history, created=ChatHistory.objects.get_or_create(
+                        sub=sub,
+                        defaults={
+                            "tenant_id": tenant_id,
+                            "oid": oid,
+                            "username": email,
+                            "messages": []
+                        }
+                    )
+                    return messages_from_dict(chat_history.messages)
+                
+                return await get_chat_history(self.sub)
+            
+            def clear(self):
+                pass
+
+            async def aadd_messages(self, messages: list[BaseMessage]):
+                @sync_to_async
+                def append_messages(sub: str, messagess: list[BaseMessage]):
+                    chat_history, created=ChatHistory.objects.get_or_create(
+                        sub=sub,
+                        defaults={
+                            "tenant_id": tenant_id,
+                            "oid": oid,
+                            "username": email,
+                            "messages": []
+                        }
+                    )
+                    chat_history.messages.extend(messages)
+                    chat_history.save()
+                await append_messages(self.sub, messages)
+        
+        orm_chat_history=OrmChatHistory(sub)
+        chat_history=await orm_chat_history.aget_messages
+        print(chat_history)
+        chat_history_subset=chat_history[-10:]
 
 
 
@@ -123,7 +172,6 @@ class Chat(AsyncWebsocketConsumer):
                     "content": document["chunk"],
                 }
                 documents_dict.append(dict_output)
-            # pprint(documents_dict)
 
             return documents_dict
         
@@ -187,7 +235,7 @@ class Chat(AsyncWebsocketConsumer):
                 "You are a AI assistant, please respond to the users query with comprehensive response based on reference documents. NEVER use facts outside of the reference. If you cannot answer based on the reference, say you don't know.",
             )
             
-            response = llm_with_tools.invoke([system_prompt] + state["messages"], config)
+            response = llm_with_tools.invoke([system_prompt] + chat_history_subset + state["messages"], config)
             return {
                 "messages": response,
                 "answer": response.content
@@ -299,7 +347,23 @@ class Chat(AsyncWebsocketConsumer):
             "message": answer,
             "references": references,
             "is_completed": True
-        }        
+        }
+
+
+
+        # Save the chat history
+        human_message=HumanMessage(content=received_message)
+        ai_message=AIMessage(content=answer)
+        langchain_messages: Sequence[BaseMessage]=[human_message, ai_message]
+        serialised_messages = messages_to_dict(langchain_messages)
+
+        await orm_chat_history.aadd_messages(serialised_messages)
+        
+        # await save_chat_history(sub, tenant_id, oid, email, received_message, answer)
+
+
+
+        # Send the final message
         await self.send(text_data=json.dumps(final_output))
 
 

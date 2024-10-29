@@ -187,6 +187,10 @@ def tag_delete_file(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def create_or_run_index(request):
+    # Start time to check if the indexer is running (down there)
+    start_time = datetime.now()
+    sleep(1)
+
     # Set names
     case=request.headers.get('Case')
     tenant_id=get_claim_from_token_http(request, 'tid')
@@ -527,7 +531,6 @@ def create_or_run_index(request):
             }
         )
 
-        start_time = datetime.now()
         indexer_client.create_or_update_indexer(indexer)
     
 

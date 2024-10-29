@@ -587,51 +587,6 @@ def get_index_status(request):
 
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_index_status(request):
-    # Set names
-    case=request.headers.get('Case')
-    tenant_id=get_claim_from_token_http(request, 'tid')
-
-    if case == 'customerservice':
-        indexer_name=case
-    elif case == 'organisation':
-        indexer_name=tenant_id
-
-
-
-    # Set up client
-    credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-
-    indexer_client=SearchIndexerClient(
-        endpoint=AZURE_SEARCH_ENDPOINT,
-        credential=credential
-        )
-    
-    status = indexer_client.get_indexer_status(name=indexer_name)  # Call your SDK
-    pprint(status.as_dict().get('lastResult')["end_time"])
-    
-    return Response({"status": status.as_dict()})
-
-
-
-
-
-    # Parse the URL to extract the domain (netloc) and path
-    parsed_url = urlparse(url)
-    domain = parsed_url.netloc.replace('.', '_')  # Replace '.' with '_' for safe blob name
-    path = parsed_url.path.strip('/').replace('/', '_')  # Make the path blob-safe
-
-    # Create a hash of the entire URL
-    url_hash = hashlib.sha256(url.encode()).hexdigest()
-
-    # Combine the domain, path, and hash for a readable unique name
-    blob_name = f"{domain}_{path}_{url_hash[:8]}.{extension}"  # Use first 8 chars of the hash
-
-    return blob_name
-
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -692,57 +647,4 @@ class KnowledgeBaseStatusViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-
-
-
-
-# from concurrent.futures import ThreadPoolExecutor
-# from rest_framework.response import Response
-# from rest_framework.decorators import api_view, permission_classes
-# from rest_framework.permissions import IsAuthenticated
-
-# @api_view(['POST'])
-# @permission_classes([IsAuthenticated])
-# def scrape_urls(request):
-#     # Set names
-#     case = request.headers.get('Case')
-#     tenant_id = get_claim_from_token_http(request, 'tid')
-
-#     if case == 'customerservice':
-#         container_name = case
-#     elif case == 'organisation':
-#         container_name = tenant_id
-
-#     urls = request.data.get("urls", [])
-
-#     # Function to handle scraping and uploading
-#     def scrape_and_upload(url):
-#         print(f"Started scraping for {url}")
-#         blob_name = generate_file_name_from_url(url)
-
-#         # Scrape the URL
-#         content = scrape_url(url)
-        
-#         metadata = {
-#             "tenant_id": tenant_id,
-#             "is_deleted": "false",
-#             "source": "web"
-#         }
-
-#         # Upload the blob
-#         upload_blob(
-#             data=content,
-#             output_name=blob_name,
-#             container_name=container_name,
-#             account_name=AZURE_STORAGE_ACCOUNT,
-#             account_key=AZURE_STORAGE_KEY,
-#             metadata=metadata
-#         )
-#         return f"Success for {url}"
-
-#     # Use ThreadPoolExecutor to handle multiple URLs concurrently
-#     with ThreadPoolExecutor() as executor:
-#         results = list(executor.map(scrape_and_upload, urls))
-
-#     return Response({"message": "Success", "details": results})
 

@@ -44,6 +44,7 @@ from utils.miscellaneous import (
 )
 from utils.langchain.tools import tool_retriever_local
 from utils.langchain.utils import OrmChatMessageHistory
+from utils.langchain.agents import achat_rag
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
@@ -53,6 +54,7 @@ from asgiref.sync import sync_to_async
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages.base import messages_to_dict
+
 
 
 
@@ -92,7 +94,7 @@ class Chat(AsyncWebsocketConsumer):
         await self.chat(received_message)
 
 
-
+    
     async def chat(self, received_message):
         # setup & variables
         # variables

@@ -4,7 +4,7 @@ from django.db import models
 class ChatHistory(models.Model):
     user_uuid = models.CharField(max_length=50, null=True)
     datetime = models.DateTimeField(auto_now_add=True)
-    messages = models.JSONField()
+    messages = models.JSONField(null=True)
 
     class Meta:
         db_table = 'chat_history'

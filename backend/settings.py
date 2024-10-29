@@ -176,8 +176,6 @@ LOGGING = {
     },
 }
 
-
-
 # Internationalization
 LANGUAGE_CODE = "en-us"
 
@@ -186,4 +184,14 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 
 USE_TZ = True
+
+# # Celery configurations
+# CELERY_BROKER_URL = "redis://localhost:6379/0"  # Redis
+# CELERY_RESULT_BACKEND = "redis://localhost:6379/0"  # Redis backend
+# CELERY_TASK_SERIALIZER = "json"
+# CELERY_RESULT_SERIALIZER = "json"
+# CELERY_ACCEPT_CONTENT = ["json"]
+# CELERY_TASK_TIME_LIMIT = 300  # Limit tasks to 5 minutes
+# CELERY_TASK_SOFT_TIME_LIMIT = 200  # Grace period before forced termination
+
 
